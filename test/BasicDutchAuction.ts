@@ -16,9 +16,13 @@ describe("BasicDutchAuction", function () {
   }
 
   describe("Deployment", function () {
-    it("Current price should be equal to 110", async function () {
-      const { basicDutchAuction } = await loadFixture(deployBasicDutchAuctionFixture);
-      expect(await basicDutchAuction.getCurrentPrice()).to.equal(110);
+    it("Contract should be owned by deployer", async function () {
+      const { basicDutchAuction, owner } = await loadFixture(deployBasicDutchAuctionFixture);
+      expect(await basicDutchAuction.getOwner()).to.equal(owner.address);
+    });
+    it("Reserve Price price should be equal to 100", async function () {
+      const { basicDutchAuction, owner } = await loadFixture(deployBasicDutchAuctionFixture);
+      expect(await basicDutchAuction.getReservePrice()).to.equal(100);
     });
   });
 });
