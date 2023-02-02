@@ -8,15 +8,15 @@ contract BasicDutchAuction is Ownable, ReentrancyGuard {
      Initialization parameters
     */
     // the minimum amount of wei that the seller is willing to accept for the item
-    uint256 private _reservePrice = 0.1 ether;
+    uint256 private _reservePrice;
     // Initial block number
     uint256 private _initialBlock;
     // the number of blockchain blocks that the auction is open for
-    uint256 private _numBlocksAuctionOpen = 10;
+    uint256 private _numBlocksAuctionOpen;
     // the amount of wei that the auction price should decrease by during each subsequent block.
-    uint256 private _offerPriceDecrement = 0.001 ether;
-    // The current price of the item
-    uint256 private _auctionPrice;
+    uint256 private _offerPriceDecrement;
+    // The initial price of the item
+    uint256 private _initialPrice;
     // Whether the auction is open or closed
     bool private _auctionOpen;
     /*
@@ -31,13 +31,23 @@ contract BasicDutchAuction is Ownable, ReentrancyGuard {
     // Bidders and their bid amounts
     mapping(address => uint256) public _bids;
 
-    constructor() {
+    constructor(
+        address seller,
+        uint256 reservePrice,
+        uint256 numBlocksAuctionOpen,
+        uint256 offerPriceDecrement
+    ) {
+        // Set auction parameters
+        _seller = payable(seller);
+        _reservePrice = reservePrice;
+        _numBlocksAuctionOpen = numBlocksAuctionOpen;
+        _offerPriceDecrement = offerPriceDecrement;
         // Open the auction
         _auctionOpen = true;
         // Set the initial block to current block
         _initialBlock = block.number;
         // Set the initial price of the item
-        _auctionPrice =
+        _initialPrice =
             _reservePrice +
             (_numBlocksAuctionOpen * _offerPriceDecrement);
     }
@@ -57,9 +67,17 @@ contract BasicDutchAuction is Ownable, ReentrancyGuard {
         return _offerPriceDecrement;
     }
 
+    // View initial price
+    function getInitialPrice() public view returns (uint256) {
+        return _initialPrice;
+    }
+
     // View current price
-    function getAuctionPrice() public view returns (uint256) {
-        return _auctionPrice;
+    function getCurrentPrice() public view returns (uint256) {
+        return
+            _initialPrice -
+            (block.number - _initialBlock) *
+            _offerPriceDecrement;
     }
 
     // Check auction status
@@ -86,10 +104,12 @@ contract BasicDutchAuction is Ownable, ReentrancyGuard {
     function bid() public payable nonReentrant {
         // check that the auction is still open
         require(isAuctionOpen() == true, "Auction is closed!");
+        // check that the bid is greater than the reserve price
+        require(msg.value >= _reservePrice, "Bid is below reserve price!");
         // Add current bidder to list of bidders
         _bidders.push(payable(msg.sender));
         // if bid is greater than or equal to current price, declare winner, refund other bidders & close auction
-        if (msg.value >= _auctionPrice) {
+        if (msg.value >= getCurrentPrice()) {
             // Declare winner & close auction
             _buyer = msg.sender;
             _closeAuction();
