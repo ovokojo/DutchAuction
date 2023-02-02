@@ -1,18 +1,25 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import { JsonRpcProvider } from "@ethersproject/providers";
 
-describe("BasicDutchAuction", function () {
+describe("BasicDutchAuction", async function () {
   // We define a fixture to reuse the same setup in every test.
   // We use loadFixture to run this setup once, snapshot that state,
   // and reset Hardhat Network to that snapshot in every test.
   async function deployBasicDutchAuctionFixture() {
     // Contracts are deployed using the first signer/account by default
-    const [owner, firstBidder, secondBidder] = await ethers.getSigners();
+    const [owner] = await ethers.getSigners();
     const basicDutchAuctionFactory = await ethers.getContractFactory("BasicDutchAuction");
     const basicDutchAuction = await basicDutchAuctionFactory.deploy();
+    const provider = ethers.provider as JsonRpcProvider;
+    return { basicDutchAuction, owner, provider };
+  }
 
-    return { basicDutchAuction, owner };
+  async function mineBlocks(provider: JsonRpcProvider, blockCount: number) {
+    for (let i = 0; i < blockCount; i++) {
+      await provider.send('evm_mine', []);
+    }
   }
 
   describe("Deployment", function () {
@@ -52,10 +59,17 @@ describe("BasicDutchAuction", function () {
       expect(await basicDutchAuction.getAuctionPrice()).to.equal(110000000000000000n);
       expect(reservePrice.add(numBlocksAuctionOpen.mul(offerPriceDecrement))).to.equal(await basicDutchAuction.getAuctionPrice());
     });
+  });
 
-    it("should have the auction open", async function () {
-      const { basicDutchAuction } = await loadFixture(deployBasicDutchAuctionFixture);
-      expect(await basicDutchAuction.getAuctionStatus()).to.equal(true);
+  describe("Auction status", function () {
+    it("should be open if within the number of required blocks", async function () {
+      const { basicDutchAuction, provider } = await loadFixture(deployBasicDutchAuctionFixture);
+      const numBlocksAuctionOpen = await basicDutchAuction.getNumBlocksAuctionOpen();
+      const currentBlock = await basicDutchAuction.getCurrentBlock();
+      const initialBlock = await basicDutchAuction.getInitialBlock();
+      await mineBlocks(provider, 10);
+      expect(initialBlock.add(numBlocksAuctionOpen)).greaterThan(currentBlock);
+      expect(await basicDutchAuction.isAuctionOpen()).to.equal(true);
     });
   });
 });
