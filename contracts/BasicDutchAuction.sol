@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-contract BasicDutchAuction is Ownable {
+contract BasicDutchAuction is Ownable, ReentrancyGuard {
     /*
      Initialization parameters
     */
@@ -22,7 +23,7 @@ contract BasicDutchAuction is Ownable {
      Stakeholders
     */
     // the seller of the item
-    address private _seller;
+    address payable private _seller;
     // the winning buyer of the item
     address private _buyer;
     // List of bidders
@@ -82,7 +83,7 @@ contract BasicDutchAuction is Ownable {
     }
 
     // function to bid on the item
-    function bid() public payable {
+    function bid() public payable nonReentrant {
         // check that the auction is still open
         require(isAuctionOpen() == true, "Auction is closed!");
         // Add current bidder to list of bidders
@@ -93,11 +94,22 @@ contract BasicDutchAuction is Ownable {
             _buyer = msg.sender;
             _closeAuction();
             // Send money to seller
-            payable(_seller).transfer(msg.value);
+            (bool purchaseSuccess, ) = _seller.call{value: msg.value}("");
+            if (!purchaseSuccess) {
+                revert();
+            }
             // Refund all other bidders
             for (uint i = 0; i < _bidders.length; i++) {
                 address payable bidder = _bidders[i];
-                bidder.transfer(_bids[bidder]);
+                // require contract has enough money to refund
+                require(
+                    address(this).balance >= _bids[bidder],
+                    "Not enough funds to refund bidder!"
+                );
+                (bool refundSuccess, ) = bidder.call{value: _bids[bidder]}("");
+                if (!refundSuccess) {
+                    revert();
+                }
                 _bids[bidder] = 0;
             }
             // Record winning bid

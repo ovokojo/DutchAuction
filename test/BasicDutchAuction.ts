@@ -72,4 +72,6 @@ describe("BasicDutchAuction", async function () {
       expect(await basicDutchAuction.isAuctionOpen()).to.equal(true);
     });
   });
+  // TODO: Should be closed if there is a winning bid
+  // TODO: Test bid
 });
