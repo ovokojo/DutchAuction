@@ -8,14 +8,18 @@ contract NFTDutchAuction is Ownable, ReentrancyGuard, IERC721 {
     /*
      Initialization parameters
     */
+    // The NFT being auctioned
+    IERC721 public nft;
+    // Token id of NFT
+    uint256 private nftTokenId;
     // the minimum amount of wei that the seller is willing to accept for the item
-    uint256 private _reservePrice;
+    uint256 private reservePrice;
     // Initial block number
     uint256 private _initialBlock;
     // the number of blockchain blocks that the auction is open for
-    uint256 private _numBlocksAuctionOpen;
+    uint256 private numBlocksAuctionOpen;
     // the amount of wei that the auction price should decrease by during each subsequent block.
-    uint256 private _offerPriceDecrement;
+    uint256 private offerPriceDecrement;
     // The initial price of the item
     uint256 private _initialPrice;
     // Whether the auction is open or closed
@@ -23,8 +27,6 @@ contract NFTDutchAuction is Ownable, ReentrancyGuard, IERC721 {
     /*
      Stakeholders
     */
-    // the seller of the item
-    address payable private _seller;
     // the winning buyer of the item
     address private _buyer;
     // List of bidders
@@ -33,16 +35,18 @@ contract NFTDutchAuction is Ownable, ReentrancyGuard, IERC721 {
     mapping(address => uint256) public _bids;
 
     constructor(
-        address seller,
-        uint256 reservePrice,
-        uint256 numBlocksAuctionOpen,
-        uint256 offerPriceDecrement
+        address erc721TokenAddress,
+        uint256 _nftTokenId,
+        uint256 _reservePrice,
+        uint256 _numBlocksAuctionOpen,
+        uint256 _offerPriceDecrement
     ) {
         // Set auction parameters
-        _seller = payable(seller);
-        _reservePrice = reservePrice;
-        _numBlocksAuctionOpen = numBlocksAuctionOpen;
-        _offerPriceDecrement = offerPriceDecrement;
+        nftTokenId = _nftTokenId;
+        nft = IERC721(erc721TokenAddress);
+        reservePrice = _reservePrice;
+        numBlocksAuctionOpen = _numBlocksAuctionOpen;
+        offerPriceDecrement = _offerPriceDecrement;
         // Open the auction
         _auctionOpen = true;
         // Set the initial block to current block
@@ -110,17 +114,22 @@ contract NFTDutchAuction is Ownable, ReentrancyGuard, IERC721 {
 
     // View current price
     function getReservePrice() public view returns (uint256) {
-        return _reservePrice;
+        return reservePrice;
+    }
+
+    // Get NFT token ID
+    function getNFTTokenId() public view returns (uint256) {
+        return nftTokenId;
     }
 
     // View current price
     function getNumBlocksAuctionOpen() public view returns (uint256) {
-        return _numBlocksAuctionOpen;
+        return numBlocksAuctionOpen;
     }
 
     // View number of blockchain blocks that the auction is open for
     function getOfferPriceDecrement() public view returns (uint256) {
-        return _offerPriceDecrement;
+        return offerPriceDecrement;
     }
 
     // View initial price
@@ -133,14 +142,14 @@ contract NFTDutchAuction is Ownable, ReentrancyGuard, IERC721 {
         return
             _initialPrice -
             (block.number - _initialBlock) *
-            _offerPriceDecrement;
+            offerPriceDecrement;
     }
 
     // Check auction status
     function isAuctionOpen() public view returns (bool) {
         // If number of blockchain blocks has been exceeded, auction is closed
         if (
-            block.number > _initialBlock + _numBlocksAuctionOpen &&
+            block.number > _initialBlock + numBlocksAuctionOpen &&
             _auctionOpen == true
         ) {
             return false;
@@ -161,7 +170,7 @@ contract NFTDutchAuction is Ownable, ReentrancyGuard, IERC721 {
         // check that the auction is still open
         require(isAuctionOpen() == true, "Auction is closed!");
         // check that the bid is greater than the reserve price
-        require(msg.value >= _reservePrice, "Bid is below reserve price!");
+        require(msg.value >= reservePrice, "Bid is below reserve price!");
         // Add current bidder to list of bidders
         _bidders.push(payable(msg.sender));
         // if bid is greater than or equal to current price, declare winner, refund other bidders & close auction
@@ -169,8 +178,10 @@ contract NFTDutchAuction is Ownable, ReentrancyGuard, IERC721 {
             // Declare winner & close auction
             _buyer = msg.sender;
             _closeAuction();
-            // Send money to seller
-            (bool purchaseSuccess, ) = _seller.call{value: msg.value}("");
+            // Send money to the seller, assuming it is the contract owner
+            (bool purchaseSuccess, ) = owner().call{value: msg.value}("");
+            // Transfer nft to buyer
+            nft.transferFrom(address(this), msg.sender, nftTokenId);
             if (!purchaseSuccess) {
                 revert();
             }

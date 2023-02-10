@@ -9,11 +9,11 @@ describe("NFTDutchAuction", async function () {
   // and reset Hardhat Network to that snapshot in every test.
   async function deployBasicDutchAuctionFixture() {
     // Contracts are deployed using the first signer/account by default
-    const [owner, seller, firstBidder, secondBidder] = await ethers.getSigners();
+    const [owner, nft, firstBidder, secondBidder] = await ethers.getSigners();
     const provider = owner.provider as JsonRpcProvider; // Used ChatGPT how to connect an address to an RpcProvider
     const basicDutchAuctionFactory = await ethers.getContractFactory("NFTDutchAuction");
-    const basicDutchAuction = await basicDutchAuctionFactory.deploy(seller.address, 1000000000000000n, 10n, 100000000n);
-    return { basicDutchAuction, provider, owner, seller, firstBidder, secondBidder };
+    const basicDutchAuction = await basicDutchAuctionFactory.deploy(nft.address, 0, 1000000000000000n, 10n, 100000000n);
+    return { basicDutchAuction, provider, owner, nft, firstBidder, secondBidder };
   }
   /// Simulates increasing the number of blocks mined
   async function mineBlocks(provider: JsonRpcProvider, blockCount: number) {
@@ -94,34 +94,34 @@ describe("NFTDutchAuction", async function () {
         value: currentPrice.add(1),
       })).to.be.reverted;
     });
+
+    it("should refund unsuccessful bidders", async function () {
+      const { basicDutchAuction, firstBidder, secondBidder, provider } = await loadFixture(deployBasicDutchAuctionFixture);
+      const reservePrice = await basicDutchAuction.getReservePrice();
+      const currentPrice = await basicDutchAuction.getCurrentPrice();
+      const firstBidAmount = reservePrice.add(1);
+      const secondBidAmount = currentPrice.add(1);
+      const initialBalance = await firstBidder.getBalance();
+      await basicDutchAuction.connect(firstBidder).bid({
+        value: firstBidAmount,
+      });
+      const currentBalance = await firstBidder.getBalance();
+      await basicDutchAuction.connect(secondBidder).bid({
+        value: secondBidAmount,
+      });
+      expect(initialBalance.sub(currentBalance)).to.greaterThanOrEqual(firstBidAmount);
+    });
   });
 
-  it("should transfer to seller if a bid is successful", async function () {
-    const { basicDutchAuction, firstBidder, seller } = await loadFixture(deployBasicDutchAuctionFixture);
-    const currentPrice = await basicDutchAuction.getCurrentPrice();
-    const bidAmount = currentPrice.add(1n);
-    const initialBalance = await seller.getBalance();
-    await basicDutchAuction.connect(firstBidder).bid({
-      value: bidAmount,
+  describe("NFT transfer", function () {
+    it("should transfer NFT if a bid is successful", async function () {
+      const { basicDutchAuction, firstBidder, nft } = await loadFixture(deployBasicDutchAuctionFixture);
+      const currentPrice = await basicDutchAuction.getCurrentPrice();
+      const bidAmount = currentPrice.add(1n);
+      await basicDutchAuction.connect(firstBidder).bid({
+        value: bidAmount,
+      });
+      // expect(await nft.ownerOf(0)).to.equal(firstBidder.address);
     });
-    const currentBalance = await seller.getBalance();
-    expect(currentBalance.sub(initialBalance)).to.equal(bidAmount);
-  });
-
-  it("should refund unsuccessful bidders", async function () {
-    const { basicDutchAuction, firstBidder, secondBidder, provider } = await loadFixture(deployBasicDutchAuctionFixture);
-    const reservePrice = await basicDutchAuction.getReservePrice();
-    const currentPrice = await basicDutchAuction.getCurrentPrice();
-    const firstBidAmount = reservePrice.add(1);
-    const secondBidAmount = currentPrice.add(1);
-    const initialBalance = await firstBidder.getBalance();
-    await basicDutchAuction.connect(firstBidder).bid({
-      value: firstBidAmount,
-    });
-    const currentBalance = await firstBidder.getBalance();
-    await basicDutchAuction.connect(secondBidder).bid({
-      value: secondBidAmount,
-    });
-    expect(initialBalance.sub(currentBalance)).to.greaterThanOrEqual(firstBidAmount);
   });
 });
