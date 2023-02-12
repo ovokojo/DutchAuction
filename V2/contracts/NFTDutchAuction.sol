@@ -180,8 +180,10 @@ contract NFTDutchAuction is Ownable, ReentrancyGuard, IERC721 {
             _closeAuction();
             // Send money to the seller, assuming it is the contract owner
             (bool purchaseSuccess, ) = owner().call{value: msg.value}("");
+            // Approve buyer
+            nft.approve(msg.sender, nftTokenId);
             // Transfer nft to buyer
-            nft.transferFrom(address(this), msg.sender, nftTokenId);
+            nft.transferFrom(nft.ownerOf(nftTokenId), msg.sender, nftTokenId);
             if (!purchaseSuccess) {
                 revert();
             }

@@ -9,15 +9,23 @@ describe("NFTDutchAuction", async function () {
   // and reset Hardhat Network to that snapshot in every test.
   async function deployBasicDutchAuctionFixture() {
     // Contracts are deployed using the first signer/account by default
-    const [owner, nft, firstBidder, secondBidder] = await ethers.getSigners();
+    const [owner, firstBidder, secondBidder] = await ethers.getSigners();
     const provider = owner.provider as JsonRpcProvider; // Used ChatGPT how to connect an address to an RpcProvider
+    // Deploy the NFT contract
+    const DutchNFTFactory = await ethers.getContractFactory("DutchNFT");
+    const dutchNFT = await DutchNFTFactory.deploy();
+    // Mint NFT
+    await dutchNFT.mint(owner.address);
+    // Deploy the auction contract
     const basicDutchAuctionFactory = await ethers.getContractFactory("NFTDutchAuction");
-    const basicDutchAuction = await basicDutchAuctionFactory.deploy(nft.address, 0, 1000000000000000n, 10n, 100000000n);
-    return { basicDutchAuction, provider, owner, nft, firstBidder, secondBidder };
+    const basicDutchAuction = await basicDutchAuctionFactory.deploy(dutchNFT.address, 1, 1000000000000000n, 10n, 100000000n);
+    // Set the auction contract as an approved operator for the NFT
+    await dutchNFT.setApprovalForAll(basicDutchAuction.address, true);
+    return { basicDutchAuction, provider, owner, dutchNFT, firstBidder, secondBidder };
   }
   /// Simulates increasing the number of blocks mined
   async function mineBlocks(provider: JsonRpcProvider, blockCount: number) {
-    for (let i = 0; i < blockCount; i++) {
+    for (let i = 0; i < blockCount - 1; i++) {
       await provider.send('evm_mine', []);
     }
   }
@@ -113,15 +121,23 @@ describe("NFTDutchAuction", async function () {
     });
   });
 
+  describe("NFT Minting", function () {
+    it("should mint NFT ", async function () {
+      const { dutchNFT, firstBidder } = await loadFixture(deployBasicDutchAuctionFixture);
+      await dutchNFT.mint(firstBidder.address);
+      expect(await dutchNFT.ownerOf(2)).to.equal(firstBidder.address);
+    });
+  });
+
   describe("NFT transfer", function () {
-    it("should transfer NFT if a bid is successful", async function () {
-      const { basicDutchAuction, firstBidder, nft } = await loadFixture(deployBasicDutchAuctionFixture);
+    it("should transfer the NFT if a bid is successful", async function () {
+      const { basicDutchAuction, firstBidder, dutchNFT } = await loadFixture(deployBasicDutchAuctionFixture);
       const currentPrice = await basicDutchAuction.getCurrentPrice();
       const bidAmount = currentPrice.add(1n);
       await basicDutchAuction.connect(firstBidder).bid({
         value: bidAmount,
       });
-      // expect(await nft.ownerOf(0)).to.equal(firstBidder.address);
+      expect(await dutchNFT.ownerOf(1)).to.equal(firstBidder.address);
     });
   });
 });
