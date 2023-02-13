@@ -3,8 +3,10 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
 
-contract NFTDutchAuction is Ownable, ReentrancyGuard, IERC721 {
+contract NFTDutchAuction is Ownable, ReentrancyGuard {
     /*
      Initialization parameters
     */
@@ -55,61 +57,6 @@ contract NFTDutchAuction is Ownable, ReentrancyGuard, IERC721 {
         _initialPrice =
             _reservePrice +
             (_numBlocksAuctionOpen * _offerPriceDecrement);
-    }
-
-    // IERC721 required functions
-    function balanceOf(address owner) public view returns (uint256) {
-        revert("Not implemented");
-    }
-
-    function approve(address to, uint256 tokenId) public {
-        revert("Not implemented");
-    }
-
-    function getApproved(uint256 tokenId) public view returns (address) {
-        revert("Not implemented");
-    }
-
-    function isApprovedForAll(
-        address owner,
-        address operator
-    ) public view returns (bool) {
-        revert("Not implemented");
-    }
-
-    function ownerOf(uint256 tokenId) public view returns (address) {
-        revert("Not implemented");
-    }
-
-    function transferFrom(address from, address to, uint256 tokenId) public {
-        revert("Not implemented");
-    }
-
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId
-    ) public {
-        revert("Not implemented");
-    }
-
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes memory data
-    ) public {
-        revert("Not implemented");
-    }
-
-    // Contract functions
-
-    function setApprovalForAll(address operator, bool _approved) public {
-        revert("Not implemented");
-    }
-
-    function supportsInterface(bytes4 interfaceId) public view returns (bool) {
-        revert("Not implemented");
     }
 
     // View current price
@@ -177,7 +124,8 @@ contract NFTDutchAuction is Ownable, ReentrancyGuard, IERC721 {
         if (msg.value >= getCurrentPrice()) {
             // Declare winner & close auction
             _buyer = msg.sender;
-            _closeAuction();
+            // Close auction
+            _auctionOpen = false;
             // Send money to the seller, assuming it is the contract owner
             (bool purchaseSuccess, ) = owner().call{value: msg.value}("");
             // Approve buyer
@@ -207,9 +155,5 @@ contract NFTDutchAuction is Ownable, ReentrancyGuard, IERC721 {
             // Otherwise, record bid amount by bidder
             _bids[msg.sender] += msg.value;
         }
-    }
-
-    function _closeAuction() private {
-        _auctionOpen = false;
     }
 }

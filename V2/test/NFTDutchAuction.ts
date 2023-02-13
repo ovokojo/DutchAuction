@@ -64,7 +64,8 @@ describe("NFTDutchAuction", async function () {
       await mineBlocks(provider, numBlocksAuctionOpen.toNumber());
       const currentBlock = await basicDutchAuction.getCurrentBlock();
       expect(initialBlock.add(numBlocksAuctionOpen)).lessThanOrEqual(currentBlock);
-      expect(await basicDutchAuction.isAuctionOpen()).equal(true);
+      const isAuctionOpen = await basicDutchAuction.isAuctionOpen();
+      expect(isAuctionOpen).equal(true);
     });
 
     it("should have the right auction price", async function () {
@@ -74,6 +75,42 @@ describe("NFTDutchAuction", async function () {
       const offerPriceDecrement = await basicDutchAuction.getOfferPriceDecrement();
       const initialPrice = await basicDutchAuction.getInitialPrice();
       expect(initialPrice.sub(currentBlockNumber.sub(initialBlockNumber).mul(offerPriceDecrement))).to.equal(await basicDutchAuction.getCurrentPrice());
+    });
+
+
+    it("should record a bid below current price", async function () {
+      const { basicDutchAuction, firstBidder } = await loadFixture(deployBasicDutchAuctionFixture);
+      const currentPrice = await basicDutchAuction.getCurrentPrice();
+      const bidAmount = currentPrice.sub(1);
+      await basicDutchAuction.connect(firstBidder).bid({
+        value: bidAmount,
+      });
+      const bidAddress = await basicDutchAuction._bidders(0)
+      const bid = await basicDutchAuction._bids(bidAddress);
+      expect(bidAddress).to.equal(firstBidder.address);
+      expect(bid).to.equal(bidAmount);
+    });
+
+    it("should transfer the NFT to the winning bidder", async function () {
+      const { basicDutchAuction, firstBidder, dutchNFT } = await loadFixture(deployBasicDutchAuctionFixture);
+      const currentPrice = await basicDutchAuction.getCurrentPrice();
+      const bidAmount = currentPrice.add(1n);
+      await basicDutchAuction.connect(firstBidder).bid({
+        value: bidAmount,
+      });
+      const owner = await dutchNFT.ownerOf(1);
+      expect(owner).to.equal(firstBidder.address);
+    });
+
+    it("should close auction if a winning bid is placed", async function () {
+      const { basicDutchAuction, firstBidder } = await loadFixture(deployBasicDutchAuctionFixture);
+      const currentPrice = await basicDutchAuction.getCurrentPrice();
+      const bidAmount = currentPrice.add(1n);
+      await basicDutchAuction.connect(firstBidder).bid({
+        value: bidAmount,
+      });
+      const auctionStatus = await basicDutchAuction.isAuctionOpen();
+      expect(auctionStatus).to.equal(false);
     });
 
     it("should reject a bid if auction is closed", async function () {
@@ -121,23 +158,69 @@ describe("NFTDutchAuction", async function () {
     });
   });
 
-  describe("NFT Minting", function () {
+  describe("NFT Functions", function () {
     it("should mint NFT ", async function () {
       const { dutchNFT, firstBidder } = await loadFixture(deployBasicDutchAuctionFixture);
       await dutchNFT.mint(firstBidder.address);
-      expect(await dutchNFT.ownerOf(2)).to.equal(firstBidder.address);
+      const owner = await dutchNFT.ownerOf(2);
+      expect(owner).to.equal(firstBidder.address);
     });
-  });
+    it("should check NFT Balance", async function () {
+      const { dutchNFT, firstBidder } = await loadFixture(deployBasicDutchAuctionFixture);
+      await dutchNFT.mint(firstBidder.address);
+      const balance = await dutchNFT.balanceOf(firstBidder.address);
+      expect(balance).to.equal(1);
+    });
+    it("should check NFT Owner", async function () {
+      const { dutchNFT, firstBidder } = await loadFixture(deployBasicDutchAuctionFixture);
+      await dutchNFT.mint(firstBidder.address);
+      const owner = await dutchNFT.ownerOf(2);
+      expect(owner).to.equal(firstBidder.address);
+    });
+    it("should approve NFT recipient to transfer a token", async function () {
+      const { dutchNFT, firstBidder, secondBidder } = await loadFixture(deployBasicDutchAuctionFixture);
+      // create a new instance of the contract connected to the `firstBidder` address
+      const nft = dutchNFT.connect(firstBidder);
+      // Note: initially used the dutchNFT instance from the loadFixture but it didn't work
+      // asked chatGPT why I'm getting error "ERC721: approve caller is not token owner or approved for all"
+      // It suggested using a new instance of the contract
+      await nft.mint(firstBidder.address);
+      await nft.approve(secondBidder.address, 2);
+      const approvedAddress = await nft.getApproved(2);
+      expect(approvedAddress).to.equal(secondBidder.address);
+    });
+    it("should approve NFT recipient to transfer all tokens", async function () {
+      const { dutchNFT, firstBidder, secondBidder } = await loadFixture(deployBasicDutchAuctionFixture);
+      const nft = dutchNFT.connect(firstBidder);
+      await nft.mint(firstBidder.address);
+      await nft.mint(firstBidder.address);
+      await nft.setApprovalForAll(secondBidder.address, true)
+      const approvedAddress = await nft.isApprovedForAll(firstBidder.address, secondBidder.address);
+      expect(approvedAddress).to.equal(true);
+    });
+    it("should enable approved NFT recipient to transfer a token", async function () {
+      const { dutchNFT, firstBidder, secondBidder } = await loadFixture(deployBasicDutchAuctionFixture);
+      const nft = dutchNFT.connect(firstBidder);
+      await nft.mint(firstBidder.address);
+      await nft.approve(secondBidder.address, 2);
+      await nft.transferFrom(firstBidder.address, secondBidder.address, 2);
+      const owner = await nft.ownerOf(2)
+      expect(owner).to.equal(secondBidder.address);
+    });
 
-  describe("NFT transfer", function () {
-    it("should transfer the NFT if a bid is successful", async function () {
-      const { basicDutchAuction, firstBidder, dutchNFT } = await loadFixture(deployBasicDutchAuctionFixture);
-      const currentPrice = await basicDutchAuction.getCurrentPrice();
-      const bidAmount = currentPrice.add(1n);
-      await basicDutchAuction.connect(firstBidder).bid({
-        value: bidAmount,
-      });
-      expect(await dutchNFT.ownerOf(1)).to.equal(firstBidder.address);
+    it("should enable approved NFT recipient to transfer all tokens", async function () {
+      const { dutchNFT, firstBidder, secondBidder } = await loadFixture(deployBasicDutchAuctionFixture);
+      const nft = dutchNFT.connect(firstBidder);
+      await nft.mint(firstBidder.address);
+      await nft.mint(firstBidder.address);
+      await nft.mint(firstBidder.address);
+      await nft.setApprovalForAll(secondBidder.address, true)
+      await nft.transferFrom(firstBidder.address, secondBidder.address, 2);
+      await nft.transferFrom(firstBidder.address, secondBidder.address, 3);
+      await nft.transferFrom(firstBidder.address, secondBidder.address, 4);
+      expect(await nft.ownerOf(2)).to.equal(secondBidder.address);
+      expect(await nft.ownerOf(3)).to.equal(secondBidder.address);
+      expect(await nft.ownerOf(4)).to.equal(secondBidder.address);
     });
   });
 });
