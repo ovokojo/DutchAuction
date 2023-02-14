@@ -1,13 +1,7 @@
-# Sample Hardhat Project
+## NFT Dutch Auction
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.
+This project contains an NFT implementation of a Dutch Auction.
 
-Try running some of the following tasks:
+The contract folder contains NFTDutchAuction.sol, the auction contract and DutchNFT.sol, which implements the NFT sold in the auction.
 
-```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat run scripts/deploy.ts
-```
+The tests folder contains the TypeScript tests for both the auction & NFT, along with a screenshot of the Solidity Coverage Report.
