@@ -66,7 +66,7 @@ contract NFTDuctionAuction_ERC20Bids is Ownable, ReentrancyGuard {
             (_numBlocksAuctionOpen * _offerPriceDecrement);
     }
 
-    // View current price
+    // View reserve price
     function getReservePrice() public view returns (uint256) {
         return reservePrice;
     }
@@ -76,12 +76,12 @@ contract NFTDuctionAuction_ERC20Bids is Ownable, ReentrancyGuard {
         return nftTokenId;
     }
 
-    // View current price
+    // View number of blockchain blocks that the auction is open for
     function getNumBlocksAuctionOpen() public view returns (uint256) {
         return numBlocksAuctionOpen;
     }
 
-    // View number of blockchain blocks that the auction is open for
+    // View price decrement
     function getOfferPriceDecrement() public view returns (uint256) {
         return offerPriceDecrement;
     }
