@@ -185,4 +185,8 @@ contract NFTDuctionAuction_ERC20Bids is
             _bids[msg.sender] += bidAmount;
         }
     }
+
+    function getInitialVersion() external pure returns (string memory) {
+        return "V1";
+    }
 }

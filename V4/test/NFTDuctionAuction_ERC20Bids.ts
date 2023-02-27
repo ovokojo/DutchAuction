@@ -30,7 +30,7 @@ describe("NFTDutchAuction", async function () {
     const basicDutchAuctionFactory = await ethers.getContractFactory("NFTDuctionAuction_ERC20Bids");
     const basicDutchAuctionImplementation = await basicDutchAuctionFactory.deploy();
     await basicDutchAuctionImplementation.deployed();
-    // set initializer data
+    // Set initializer data
     const dutchCoinAddress = dutchCoin.address;
     const dutchNFTAddress = dutchNFT.address;
     const tokenId = 1;
@@ -50,7 +50,6 @@ describe("NFTDutchAuction", async function () {
     const ProxyFactory = await ethers.getContractFactory("ERC1967Proxy");
     const proxy = await ProxyFactory.deploy(basicDutchAuctionImplementation.address, initializeData);
     await proxy.deployed();
-    console.log("ERC1967Proxy deployed at:", proxy.address);
 
     // Create an instance of the NFTDutchAuction with the proxy address
     const basicDutchAuction = basicDutchAuctionFactory.attach(proxy.address);
@@ -59,7 +58,12 @@ describe("NFTDutchAuction", async function () {
     // Approve the auction contract to spend tokens on behalf of the bidders
     await dutchCoin.connect(firstBidder).approve(basicDutchAuction.address, ethers.BigNumber.from(10).pow(dutchCoinDecimals).mul(1000000));
     await dutchCoin.connect(secondBidder).approve(basicDutchAuction.address, ethers.BigNumber.from(10).pow(dutchCoinDecimals).mul(1000000));
-    return { basicDutchAuction, provider, owner, dutchCoin, dutchNFT, firstBidder, secondBidder, thirdBidder };
+
+    // Deploy V2 of the auction implementation contract
+    const basicDutchAuctionV2Factory = await ethers.getContractFactory("NFTDutchAuctionV2");
+    const basicDutchAuctionV2Implementation = await basicDutchAuctionV2Factory.deploy();
+    await basicDutchAuctionV2Implementation.deployed();
+    return { basicDutchAuction, basicDutchAuctionV2Implementation, provider, owner, dutchCoin, dutchNFT, firstBidder, secondBidder, thirdBidder };
   }
   /// Simulates increasing the number of blocks mined
   async function mineBlocks(provider: JsonRpcProvider, blockCount: number) {
@@ -199,4 +203,36 @@ describe("NFTDutchAuction", async function () {
       expect(balance2).to.equal(secondBidAmount);
     });
   });
+  describe("Upgrade Auction Contract", function () {
+    it("Should upgrade the contract to V2", async function () {
+      const {
+        basicDutchAuction,
+        basicDutchAuctionV2Implementation,
+        owner,
+      } = await deployBasicDutchAuctionFixture();
+      // Upgrade the proxy contract to the new implementation
+      await basicDutchAuction.connect(owner).upgradeTo(basicDutchAuctionV2Implementation.address);
+      await basicDutchAuction.deployed();
+      expect(await basicDutchAuction.getInitialVersion()).to.equal("V1");
+      // Create an instance of the V2 contract with the proxy address
+      const NFTDutchAuctionV2Factory = await ethers.getContractFactory("NFTDutchAuctionV2");
+      const nftDutchAuctionV2 = NFTDutchAuctionV2Factory.attach(basicDutchAuction.address);
+      expect(await nftDutchAuctionV2.getUpdatedVersion()).to.equal("V2");
+    });
+    it("Should check V2 auction is open", async function () {
+      const {
+        basicDutchAuction,
+        basicDutchAuctionV2Implementation,
+        owner,
+      } = await deployBasicDutchAuctionFixture();
+      await basicDutchAuction.connect(owner).upgradeTo(basicDutchAuctionV2Implementation.address);
+      await basicDutchAuction.deployed();
+      const NFTDutchAuctionV2Factory = await ethers.getContractFactory("NFTDutchAuctionV2");
+      const nftDutchAuctionV2 = NFTDutchAuctionV2Factory.attach(basicDutchAuction.address);
+      // Check auction is open
+      const isAuctionOpen = await nftDutchAuctionV2.isAuctionOpen();
+      expect(isAuctionOpen).equal(true);
+    });
+  });
+
 });
