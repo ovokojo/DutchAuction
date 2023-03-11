@@ -6,7 +6,7 @@ import { JsonRpcProvider } from "@ethersproject/providers";
 describe("NFTDutchAuction", async function () {
   // We define a fixture to reuse the same setup in every test.
   // We use loadFixture to run this setup once, snapshot that state,
-  // and reset Hardhat Network to that snapshot in every test
+  // and reset Hardhat Network to that snapshot in every test.
   async function deployBasicDutchAuctionFixture() {
     // Contracts are deployed using the first signer/account by default
     const [owner, firstBidder, secondBidder, thirdBidder] = await ethers.getSigners();
@@ -18,7 +18,7 @@ describe("NFTDutchAuction", async function () {
     await dutchNFT.mint(owner.address);
     // Deploy the DutchCoin contract
     const DutchCoinFactory = await ethers.getContractFactory("DutchCoin");
-    const dutchCoin = await DutchCoinFactory.connect(owner).deploy(ethers.BigNumber.from(10).pow(18).mul(3000000));
+    const dutchCoin = await DutchCoinFactory.connect(owner).deploy("DutchCoin", "DTC", ethers.BigNumber.from(10).pow(18).mul(3000000));
 
     // Distribute some DutchCoins to the bidders
     const dutchCoinDecimals = await dutchCoin.decimals();
