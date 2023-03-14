@@ -2,6 +2,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { JsonRpcProvider } from "@ethersproject/providers";
+import { BigNumber, Contract, Signer } from "ethers";
 
 describe("NFTDutchAuction", async function () {
   // We define a fixture to reuse the same setup in every test.
@@ -70,6 +71,63 @@ describe("NFTDutchAuction", async function () {
     for (let i = 0; i < blockCount - 1; i++) {
       await provider.send('evm_mine', []);
     }
+  }
+
+  // Helper function to sign a permit message
+  // Asked ChatGPT how to sign a permit message in TypeScript
+  async function signPermit(
+    token: Contract,
+    owner: Signer,
+    spender: string,
+    value: BigNumber,
+    nonce: BigNumber,
+    deadline: BigNumber
+  ): Promise<string> {
+    const name = await token.name();
+    const version = "1";
+    const chainId = (await ethers.provider.getNetwork()).chainId;
+    const domain = {
+      name,
+      version,
+      chainId,
+      verifyingContract: token.address,
+    };
+
+    const types = {
+      Permit: [
+        { name: "owner", type: "address" },
+        { name: "spender", type: "address" },
+        { name: "value", type: "uint256" },
+        { name: "nonce", type: "uint256" },
+        { name: "deadline", type: "uint256" },
+      ],
+    };
+
+    const valueObj = {
+      owner: await owner.getAddress(),
+      spender: spender,
+      value: value.toString(),
+      nonce: nonce.toString(),
+      deadline: deadline.toString(),
+    };
+
+    const typedData = JSON.stringify({
+      types: {
+        EIP712Domain: [
+          { name: "name", type: "string" },
+          { name: "version", type: "string" },
+          { name: "chainId", type: "uint256" },
+          { name: "verifyingContract", type: "address" },
+        ],
+        ...types,
+      },
+      domain,
+      primaryType: "Permit",
+      message: valueObj,
+    });
+
+    const jsonRpcProvider = owner.provider as JsonRpcProvider;
+    return await jsonRpcProvider.send("eth_signTypedData_v4", [await owner.getAddress(), typedData]);
   }
 
   describe("Deployment", function () {
@@ -233,6 +291,49 @@ describe("NFTDutchAuction", async function () {
       const isAuctionOpen = await nftDutchAuctionV2.isAuctionOpen();
       expect(isAuctionOpen).equal(true);
     });
+  });
+
+  describe("ERC20Permit Functionality", function () {
+    it("should record a bid using permit", async function () {
+      const { basicDutchAuction, firstBidder, dutchCoin } = await loadFixture(deployBasicDutchAuctionFixture);
+      const currentPrice = await basicDutchAuction.getCurrentPrice();
+      const bidAmount = currentPrice.sub(1);
+      const deadline = BigNumber.from(Math.floor((Date.now() / 1000) + 3600));
+
+      // Sign permit message
+      const nonce = await dutchCoin.nonces(firstBidder.address);
+      const signature = await signPermit(dutchCoin, firstBidder, basicDutchAuction.address, bidAmount, nonce, deadline);
+      const { v, r, s } = ethers.utils.splitSignature(signature);
+
+      // Call permit function
+      await dutchCoin.connect(firstBidder).permit(firstBidder.address, basicDutchAuction.address, bidAmount, deadline, v, r, s);
+
+      await basicDutchAuction.connect(firstBidder).bid(bidAmount);
+
+      const bidAddress = await basicDutchAuction._bidders(0);
+      const bid = await basicDutchAuction._bids(bidAddress);
+      expect(bidAddress).to.equal(firstBidder.address);
+      expect(bid).to.equal(bidAmount);
+    });
+
+    it("should deny permit after the deadline", async function () {
+      const { basicDutchAuction, firstBidder, dutchCoin } = await loadFixture(deployBasicDutchAuctionFixture);
+      const currentPrice = await basicDutchAuction.getCurrentPrice();
+      const bidAmount = currentPrice.sub(1);
+
+      // Set a deadline 1 second in the past
+      const deadline = BigNumber.from(Math.floor(Date.now() / 1000) - 1);
+
+      const nonce = await dutchCoin.nonces(await firstBidder.getAddress());
+      const signature = await signPermit(dutchCoin, firstBidder, basicDutchAuction.address, bidAmount, nonce, deadline);
+      const { v, r, s } = ethers.utils.splitSignature(signature);
+
+      // Attempt to call permit with the expired deadline
+      await expect(
+        dutchCoin.connect(firstBidder).permit(await firstBidder.getAddress(), basicDutchAuction.address, bidAmount, deadline, v, r, s)
+      ).to.be.revertedWith("ERC20Permit: expired deadline");
+    });
+
   });
 
 });
