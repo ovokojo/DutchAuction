@@ -1,8 +1,6 @@
 import { useWeb3React } from '@web3-react/core';
 import { Contract, ethers, Signer } from 'ethers';
 import {
-    ChangeEvent,
-    MouseEvent,
     ReactElement,
     useEffect,
     useState
@@ -26,6 +24,7 @@ const StyledButton = styled.button`
   border-radius: 1rem;
   border-color: blue;
   cursor: pointer;
+  margin-bottom: 20px;
 `;
 
 const SectionTitle = styled.h2`
@@ -103,9 +102,11 @@ export function BasicDutchAuction(): ReactElement {
             const offerPriceDecrement = ethers.utils.formatEther(await auction.getOfferPriceDecrement());
             const initialPrice = ethers.utils.formatEther(await auction.getInitialPrice());
             const currentPrice = ethers.utils.formatEther(await auction.getCurrentPrice());
+            const isOpen = await auction.isAuctionOpen();
             const winner = await auction.getWinner();
 
             const auctionInfo = `
+                Status: ${isOpen ? 'Auction Open' : 'Auction Closed'}
                 Seller: ${seller}
                 Reserve Price: ${reservePrice} ETH
                 Number of Blocks Auction Open: ${numBlocksAuctionOpen}
@@ -130,16 +131,16 @@ export function BasicDutchAuction(): ReactElement {
                 signer
             );
 
-            const ended = await auction.ended();
-            if (ended) {
+            const auctionOpen = await auction.isAuctionOpen();
+            if (!auctionOpen) {
                 setBidResult('Auction has already ended.');
                 return;
             }
-
-            const currentPrice = await auction.getCurrentPrice();
+            const reservePriceInWei = await auction.getReservePrice();
+            const reservePriceInEth = ethers.utils.formatEther(reservePriceInWei);
             const bidInWei = ethers.utils.parseEther(bidAmount);
-            if (bidInWei.lt(currentPrice)) {
-                setBidResult(`Bid must be greater than or equal to the current price: ${ethers.utils.formatEther(currentPrice)} ETH`);
+            if (bidInWei.lt(reservePriceInWei)) {
+                setBidResult(`Bid must be greater than the reserve price: ${reservePriceInEth} ETH`);
                 return;
             }
 
@@ -147,15 +148,16 @@ export function BasicDutchAuction(): ReactElement {
             await tx.wait();
 
             // Check if the auction has a winner after submitting the bid
-            const winner = await auction.winner();
+            const winner = await auction.getWinner();
             if (winner !== ethers.constants.AddressZero) {
                 setBidResult(`Bid submitted successfully! The auction was won by ${winner}`);
             } else {
                 setBidResult('Bid submitted successfully!');
             }
         } catch (error: any) {
+
             console.error('Error submitting bid:', error);
-            setBidResult('Bid submission failed.');
+            setBidResult(`Bid submission failed. Error: ${error.message}`);
         }
     }
 
@@ -217,7 +219,7 @@ export function BasicDutchAuction(): ReactElement {
             <hr />
             <SectionTitle>💸 Submit a Bid</SectionTitle>
             <div>
-                <StyledLabel>Auction Address:</StyledLabel>
+                <StyledLabel>Auction Address: </StyledLabel>
                 <StyledInput
                     type="text"
                     value={bidAddress}
@@ -226,7 +228,7 @@ export function BasicDutchAuction(): ReactElement {
             </div>
             <br></br>
             <div>
-                <StyledLabel>Bid Amount:</StyledLabel>
+                <StyledLabel>Bid Amount: </StyledLabel>
                 <StyledInput
                     type="text"
                     value={bidAmount}
